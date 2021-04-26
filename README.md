@@ -10,5 +10,5 @@ pub unsafe trait DiscriminantValues {
 	const VALUES: &'static [Self::Discriminant];
 }
 ```
-which can be derived with `#[derive(enum_traits::DiscriminantValues)]` on any enum, even generic ones.
+which can be derived with `#[derive(enum_traits::DiscriminantValues)]` on any enum with a `#[repr(Int)]`, where `Int` is a type in `std::primitive`.
 
