@@ -100,6 +100,7 @@ pub fn derive_discriminant_values(input: TokenStream) -> TokenStream {
 		let mut last_discr = BigInt::default();
 
 		let mut discrs = Vec::with_capacity(syn_enum.variants.len());
+		let mut ever_enabled_bits = BigInt::default();
 
 		for variant in syn_enum.variants.iter() {
 			let value: BigInt = match &variant.discriminant {
@@ -111,14 +112,21 @@ pub fn derive_discriminant_values(input: TokenStream) -> TokenStream {
 				_ => panic!("literal value must be a specified literal or unspecified"),
 			};
 
+			ever_enabled_bits |= &value;
 			discrs.push(syn::LitInt::new(&format!("{}", &value), Span::call_site()));
 
 			last_discr = value;
 		}
 
+		let ever_enabled_bits =
+			syn::LitInt::new(&format!("{}", ever_enabled_bits), Span::call_site());
+
 		Ok(quote!(
 			type Discriminant = ::std::primitive::#repr;
+
 			const VALUES: &'static [Self::Discriminant] = &[#(#discrs),*];
+
+			const EVER_ENABLED_BITS: Self::Discriminant = #ever_enabled_bits;
 		))
 	})(quote!(DiscriminantValues), input)
 }

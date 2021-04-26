@@ -8,6 +8,8 @@ pub unsafe trait DiscriminantValues {
 		+ PartialEq<Self::Discriminant> + std::hash::Hash + Send + Sync + Unpin;
 	
 	const VALUES: &'static [Self::Discriminant];
+
+	const EVER_ENABLED_BITS: Self::Discriminant;
 }
 
 pub unsafe trait DiscriminantHeaded: DiscriminantValues {
