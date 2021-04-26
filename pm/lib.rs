@@ -24,8 +24,6 @@ pub fn derive_enum_variant_count(input: TokenStream) -> TokenStream {
 				if segs.next().is_some() { return None; }
 				if segm.ident.to_string() != "repr" { return None; }
 
-				dbg!(&a.tokens);
-
 				let repr = match syn::parse2::<proc_macro2::TokenTree>(a.tokens.clone()) {
 					Ok(proc_macro2::TokenTree::Group(group))
 						if group.delimiter() == proc_macro2::Delimiter::Parenthesis
