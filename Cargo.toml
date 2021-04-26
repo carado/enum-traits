@@ -1,0 +1,9 @@
+[package]
+name = "enum-traits"
+version = "0.1.0"
+authors = ["carado <carado@carado.moe>"]
+edition = "2018"
+
+[dependencies]
+enum-traits-proc-macros = { path = "pm" }
+
