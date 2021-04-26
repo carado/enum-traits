@@ -1,7 +1,7 @@
 #![feature(
 )]
 
-pub use ::enum_traits_proc_macros::DiscriminantValues;
+pub use ::enum_traits_proc_macros::*;
 
 pub unsafe trait DiscriminantValues {
 	type Discriminant: 'static + Clone + Copy + std::fmt::Debug + Eq
