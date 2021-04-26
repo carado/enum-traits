@@ -10,6 +10,7 @@ pub unsafe trait DiscriminantValues {
 	const VALUES: &'static [Self::Discriminant];
 
 	const EVER_ENABLED_BITS: Self::Discriminant;
+	const ALWAYS_ENABLED_BITS: Self::Discriminant;
 }
 
 pub unsafe trait DiscriminantHeaded: DiscriminantValues {

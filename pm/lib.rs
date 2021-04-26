@@ -101,6 +101,7 @@ pub fn derive_discriminant_values(input: TokenStream) -> TokenStream {
 
 		let mut discrs = Vec::with_capacity(syn_enum.variants.len());
 		let mut ever_enabled_bits = BigInt::default();
+		let mut always_enabled_bits = None;
 
 		for variant in syn_enum.variants.iter() {
 			let value: BigInt = match &variant.discriminant {
@@ -113,6 +114,12 @@ pub fn derive_discriminant_values(input: TokenStream) -> TokenStream {
 			};
 
 			ever_enabled_bits |= &value;
+
+			match &mut always_enabled_bits {
+				None => always_enabled_bits = Some(value.clone()),
+				Some(v) => *v &= &value,
+			};
+
 			discrs.push(syn::LitInt::new(&format!("{}", &value), Span::call_site()));
 
 			last_discr = value;
@@ -121,12 +128,21 @@ pub fn derive_discriminant_values(input: TokenStream) -> TokenStream {
 		let ever_enabled_bits =
 			syn::LitInt::new(&format!("{}", ever_enabled_bits), Span::call_site());
 
+		let always_enabled_bits = match always_enabled_bits {
+			None => quote!(!0),
+			Some(v) => {
+				let lit = syn::LitInt::new(&format!("{}", v), Span::call_site());
+				quote!(#lit)
+			},
+		};
+
 		Ok(quote!(
 			type Discriminant = ::std::primitive::#repr;
 
 			const VALUES: &'static [Self::Discriminant] = &[#(#discrs),*];
 
 			const EVER_ENABLED_BITS: Self::Discriminant = #ever_enabled_bits;
+			const ALWAYS_ENABLED_BITS: Self::Discriminant = #always_enabled_bits;
 		))
 	})(quote!(DiscriminantValues), input)
 }
