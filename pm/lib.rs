@@ -123,14 +123,17 @@ pub fn derive_discriminant_values(input: TokenStream) -> TokenStream {
 	})(quote!(DiscriminantValues), input)
 }
 
-#[proc_macro_derive(ReprC)]
-pub fn derive_repr_c(input: TokenStream) -> TokenStream {
-	gen_enum_trait(|syn_item, _syn_enum, reprs| {
-		if !reprs.iter().flat_map(|v| v).any(|v| v == "C") {
+#[proc_macro_derive(DiscriminantHeaded)]
+pub fn derive_discriminant_headed(input: TokenStream) -> TokenStream {
+	gen_enum_trait(|syn_item, syn_enum, reprs| {
+		if !(
+			reprs.iter().flat_map(|v| v).any(|v| v == "C")
+			|| syn_enum.variants.iter().all(|v| v.fields == syn::Fields::Unit)
+		) {
 			return Err(Error::new(syn_item.span(), "expected repr(C)"));
 		}
 
 		Ok(quote!())
-	})(quote!(ReprC), input)
+	})(quote!(DiscriminantHeaded), input)
 }
 

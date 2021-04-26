@@ -10,10 +10,9 @@ pub unsafe trait DiscriminantValues {
 	const VALUES: &'static [Self::Discriminant];
 }
 
-pub unsafe trait ReprC: DiscriminantValues {
+pub unsafe trait DiscriminantHeaded: DiscriminantValues {
 	fn discriminant(&self) -> &Self::Discriminant {
 		unsafe { &*(self as *const _ as *const _) }
 	}
 }
-
 
