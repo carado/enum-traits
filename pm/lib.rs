@@ -42,6 +42,7 @@ fn gen_enum_trait(
 		&syn::DeriveInput,
 		&syn::DataEnum,
 		&Vec<Vec<Ident>>,
+		&Vec<BigInt>,
 	) -> Result<TokenStream2>,
 ) ->
 	impl FnOnce(TokenStream2, TokenStream) -> TokenStream
@@ -57,7 +58,25 @@ fn gen_enum_trait(
 
 			let reprs = reprs(&syn_item)?;
 
-			let output = f(&syn_item, &syn_enum, &reprs)?;
+			let mut discrs = Vec::new();
+			let mut next_discr = BigInt::default();
+
+			for variant in syn_enum.variants.iter() {
+				let value: BigInt = match &variant.discriminant {
+					Some((_, syn::Expr::Lit(lit))) => match &lit.lit {
+						syn::Lit::Int(lit) => lit.base10_digits().parse().unwrap(),
+						other => panic!("enum discriminant must be Int, not `{:?}`", other),
+					},
+					None => next_discr,
+					_ => panic!("literal value must be a specified literal or unspecified"),
+				};
+
+				next_discr = (&value) + 1;
+
+				discrs.push(value);
+			}
+
+			let output = f(&syn_item, &syn_enum, &reprs, &discrs)?;
 
 			Ok((syn_item, output))
 		})() {
@@ -80,9 +99,18 @@ fn gen_enum_trait(
 	}
 }
 
+fn render_bigint(value: &BigInt) -> syn::LitInt {
+	syn::LitInt::new(&format!("{}", &value), Span::call_site())
+}
+
+fn quote_bigint(value: &BigInt) -> TokenStream2 {
+	let lit = render_bigint(value);
+	quote!(#lit)
+}
+
 #[proc_macro_derive(DiscriminantValues)]
-pub fn derive_discriminant_values(input: TokenStream) -> TokenStream {
-	gen_enum_trait(|syn_item, syn_enum, reprs| {
+pub fn derive_discriminant_discrs(input: TokenStream) -> TokenStream {
+	gen_enum_trait(|syn_item, _syn_enum, reprs, discrs| {
 		let repr = reprs.iter()
 			.flat_map(|v| v)
 			.filter(|repr| {
@@ -97,59 +125,40 @@ pub fn derive_discriminant_values(input: TokenStream) -> TokenStream {
 				"enum must have a repr( ) attribute of a ::std::primitive type",
 			))?;
 	
-		let mut last_discr = BigInt::default();
+		let ever_enabled_bits = render_bigint(&
+			discrs.iter().fold(BigInt::default(), |a, b| a | b),
+		);
 
-		let mut discrs = Vec::with_capacity(syn_enum.variants.len());
-		let mut ever_enabled_bits = BigInt::default();
-		let mut always_enabled_bits = None;
+		let always_enabled_bits = render_bigint(&discrs.iter().fold(
+			Option::<BigInt>::None,
+			|opt_a, b| Some(match opt_a { None => b.clone(), Some(a) => a & b.clone() }),
+		).unwrap_or_else(BigInt::default));
 
-		for variant in syn_enum.variants.iter() {
-			let value: BigInt = match &variant.discriminant {
-				Some((_, syn::Expr::Lit(lit))) => match &lit.lit {
-					syn::Lit::Int(lit) => lit.base10_digits().parse().unwrap(),
-					other => panic!("enum discriminant must be Int, not `{:?}`", other),
-				},
-				None => last_discr + 1,
-				_ => panic!("literal value must be a specified literal or unspecified"),
-			};
+		let max = discrs.iter().max().map(quote_bigint).map_or_else(
+			|| quote!(::std::option::Option::None),
+			|v| quote!(::std::option::Option::Some(#v)),
+		);
 
-			ever_enabled_bits |= &value;
+		let count = discrs.len();
 
-			match &mut always_enabled_bits {
-				None => always_enabled_bits = Some(value.clone()),
-				Some(v) => *v &= &value,
-			};
-
-			discrs.push(syn::LitInt::new(&format!("{}", &value), Span::call_site()));
-
-			last_discr = value;
-		}
-
-		let ever_enabled_bits =
-			syn::LitInt::new(&format!("{}", ever_enabled_bits), Span::call_site());
-
-		let always_enabled_bits = match always_enabled_bits {
-			None => quote!(!0),
-			Some(v) => {
-				let lit = syn::LitInt::new(&format!("{}", v), Span::call_site());
-				quote!(#lit)
-			},
-		};
+		let discrs_lits = discrs.iter().map(render_bigint);
 
 		Ok(quote!(
 			type Discriminant = ::std::primitive::#repr;
 
-			const VALUES: &'static [Self::Discriminant] = &[#(#discrs),*];
+			const VALUES: &'static [Self::Discriminant] = &[#(#discrs_lits),*];
 
 			const EVER_ENABLED_BITS: Self::Discriminant = #ever_enabled_bits;
 			const ALWAYS_ENABLED_BITS: Self::Discriminant = #always_enabled_bits;
+			const MAX: ::std::option::Option<Self::Discriminant> = #max;
+			const COUNT: usize = #count;
 		))
 	})(quote!(DiscriminantValues), input)
 }
 
 #[proc_macro_derive(DiscriminantHeaded)]
 pub fn derive_discriminant_headed(input: TokenStream) -> TokenStream {
-	gen_enum_trait(|syn_item, syn_enum, reprs| {
+	gen_enum_trait(|syn_item, syn_enum, reprs, _| {
 		if !(
 			reprs.iter().flat_map(|v| v).any(|v| v == "C")
 			|| syn_enum.variants.iter().all(|v| v.fields == syn::Fields::Unit)
@@ -159,5 +168,30 @@ pub fn derive_discriminant_headed(input: TokenStream) -> TokenStream {
 
 		Ok(quote!())
 	})(quote!(DiscriminantHeaded), input)
+}
+
+#[proc_macro_derive(ContinuousDiscriminants)]
+pub fn derive_continuous_discriminants(input: TokenStream) -> TokenStream {
+	gen_enum_trait(|syn_item, _syn_enum, _reprs, discrs| {
+		if !discrs.windows(2).all(|ar| ar[1] == ar[0].clone() + 1) {
+			return Err(Error::new(syn_item.span(), "discontinuous discriminants"));
+		}
+
+		Ok(quote!())
+	})(quote!(ContinuousDiscriminants), input)
+}
+
+#[proc_macro_derive(FirstDiscriminantIsZero)]
+pub fn derive_first_discriminant_is_zero(input: TokenStream) -> TokenStream {
+	gen_enum_trait(|syn_item, _syn_enum, _reprs, discrs| {
+		if discrs.first().map_or(false, |v| v != &BigInt::default()) {
+			return Err(Error::new(
+				syn_item.span(),
+				"first discriminant must be 0, unspecified, or not exist",
+			));
+		}
+
+		Ok(quote!())
+	})(quote!(FirstDiscriminantIsZero), input)
 }
 

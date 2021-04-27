@@ -6,4 +6,5 @@ edition = "2018"
 
 [dependencies]
 enum-traits-proc-macros = { path = "pm" }
+num-traits = "0.2.14"
 
