@@ -7,13 +7,14 @@ use ::num_traits::AsPrimitive;
 pub unsafe trait DiscriminantValues {
 	type Discriminant: 'static + Clone + Copy + std::fmt::Debug + Eq
 		+ PartialEq<Self::Discriminant> + std::hash::Hash + Send + Sync + Unpin
-		+ AsPrimitive<usize>
+		+ AsPrimitive<usize> + PartialOrd
 	;
 	
 	const VALUES: &'static [Self::Discriminant];
 
 	const EVER_ENABLED_BITS: Self::Discriminant;
 	const ALWAYS_ENABLED_BITS: Self::Discriminant;
+	const MIN: Option<Self::Discriminant>;
 	const MAX: Option<Self::Discriminant>;
 	const COUNT: usize;
 }
@@ -63,4 +64,23 @@ impl<T> UnchangedDiscriminant<T> where
 		unsafe { array.get_unchecked_mut(T::discriminant_as_usize(self.0)) }
 	}
 }
+
+pub unsafe trait FieldlessEnum {}
+
+pub unsafe trait EnumConvertDiscriminant:
+	Sized + FieldlessEnum + DiscriminantValues + ContinuousDiscriminants
+{
+	unsafe fn from_discriminant_unchecked(discr: Self::Discriminant) -> Self {
+		std::mem::transmute_copy(&discr)
+	}
+
+	fn from_discriminant(discr: Self::Discriminant) -> Option<Self> {
+		(discr >= Self::MIN? && discr <= Self::MAX?)
+			.then(|| unsafe { Self::from_discriminant_unchecked(discr) })
+	}
+}
+
+unsafe impl<T> EnumConvertDiscriminant for T where
+	T: FieldlessEnum + DiscriminantValues + ContinuousDiscriminants,
+{}
 

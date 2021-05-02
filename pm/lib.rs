@@ -139,6 +139,11 @@ pub fn derive_discriminant_discrs(input: TokenStream) -> TokenStream {
 			|v| quote!(::std::option::Option::Some(#v)),
 		);
 
+		let min = discrs.iter().min().map(quote_bigint).map_or_else(
+			|| quote!(::std::option::Option::None),
+			|v| quote!(::std::option::Option::Some(#v)),
+		);
+
 		let count = discrs.len();
 
 		let discrs_lits = discrs.iter().map(render_bigint);
@@ -150,6 +155,7 @@ pub fn derive_discriminant_discrs(input: TokenStream) -> TokenStream {
 
 			const EVER_ENABLED_BITS: Self::Discriminant = #ever_enabled_bits;
 			const ALWAYS_ENABLED_BITS: Self::Discriminant = #always_enabled_bits;
+			const MIN: ::std::option::Option<Self::Discriminant> = #min;
 			const MAX: ::std::option::Option<Self::Discriminant> = #max;
 			const COUNT: usize = #count;
 		))
@@ -193,5 +199,16 @@ pub fn derive_first_discriminant_is_zero(input: TokenStream) -> TokenStream {
 
 		Ok(quote!())
 	})(quote!(FirstDiscriminantIsZero), input)
+}
+
+#[proc_macro_derive(FieldlessEnum)]
+pub fn derive_fieldless_enum(input: TokenStream) -> TokenStream {
+	gen_enum_trait(|syn_item, syn_enum, _reprs, _discrs| {
+		if syn_enum.variants.iter().any(|v| v.fields != syn::Fields::Unit) {
+			return Err(Error::new(syn_item.span(), "enum must have no fields"));
+		}
+
+		Ok(quote!())
+	})(quote!(FieldlessEnum), input)
 }
 
